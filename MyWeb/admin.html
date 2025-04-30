@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GreenQuest Admin</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js';
+    import {
+      getFirestore, collection, getDocs, doc, updateDoc
+    } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAGisgydvAmBQ9Crki_bTKv8JC1KTuK7A0",
+      authDomain: "greenquest-c492e.firebaseapp.com",
+      projectId: "greenquest-c492e",
+      storageBucket: "greenquest-c492e.appspot.com",
+      messagingSenderId: "420430093411",
+      appId: "1:420430093411:web:8046a20d5630b61510ec56",
+      measurementId: "G-1VF5WZNR02"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function fetchActivities() {
+      const container = document.getElementById('activity-list');
+      container.innerHTML = '';
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "activities"));
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const id = docSnap.id;
+
+          const card = document.createElement('div');
+          card.className = 'activity-card';
+
+          const statusBadge = data.status
+            ? `<span class="badge ${data.status}">${data.status}</span>`
+            : `<span class="badge pending">Pending</span>`;
+
+          card.innerHTML = `
+            <div class="header">
+              <h3>${data.activity}</h3>
+              ${statusBadge}
+            </div>
+            <p><strong>Timestamp:</strong> ${new Date(data.timestamp?.seconds * 1000).toLocaleString()}</p>
+            <p><strong>Sender:</strong> ${data.senderName}</p>
+
+            <button class="toggle-btn" onclick="this.nextElementSibling.classList.toggle('show')">Toggle Image</button>
+            <div class="hidden-content">
+              <img src="data:image/jpeg;base64,${data.image}" alt="Activity Image"/>
+            </div>
+
+            ${data.location ? `
+              <button class="toggle-btn" onclick="this.nextElementSibling.classList.toggle('show')">Toggle Map</button>
+              <div class="hidden-content map" id="map-${id}"></div>` : ''}
+
+            <div class="actions">
+              <button onclick="updateStatus('${id}', 'approved')">✅ Approve</button>
+              <button onclick="updateStatus('${id}', 'declined')">❌ Decline</button>
+            </div>
+          `;
+
+          container.appendChild(card);
+
+          if (data.location) {
+            setTimeout(() => {
+              const map = L.map(`map-${id}`).setView([data.location.latitude, data.location.longitude], 13);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+              }).addTo(map);
+              L.marker([data.location.latitude, data.location.longitude]).addTo(map);
+            }, 0);
+          }
+        });
+      } catch (e) {
+        console.error("Error fetching data:", e);
+      }
+    }
+
+    async function fetchUsers() {
+      const container = document.getElementById('user-list');
+      container.innerHTML = '<button class="back-btn" onclick="goBack()">← Back to Dashboard</button><h2 style="color:#2E7D32;">Registered Users</h2>';
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "users"));
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+
+          const userCard = document.createElement('div');
+          userCard.style.background = 'white';
+          userCard.style.padding = '15px';
+          userCard.style.marginBottom = '10px';
+          userCard.style.borderRadius = '10px';
+          userCard.style.boxShadow = '0 2px 6px rgba(0,0,0,0.1)';
+          userCard.style.display = 'flex';
+          userCard.style.alignItems = 'center';
+          userCard.style.gap = '15px';
+
+          userCard.innerHTML = `
+            <img src="data:image/jpeg;base64,${data.profileImage}" alt="Profile" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover;" />
+            <div>
+              <strong>Email:</strong> ${data.email || 'N/A'}<br>
+              <strong>Name:</strong> ${data.name || 'N/A'}<br>
+              <strong>Phone:</strong> ${data.phone || 'N/A'}
+            </div>
+          `;
+
+          container.appendChild(userCard);
+        });
+      } catch (e) {
+        console.error("Error fetching users:", e);
+        container.innerHTML += "<p style='color: red;'>Failed to load users.</p>";
+      }
+    }
+
+    window.updateStatus = async function (id, status) {
+      try {
+        const activityRef = doc(db, "activities", id);
+        await updateDoc(activityRef, { status });
+        alert(`Activity ${status}`);
+        fetchActivities();
+      } catch (e) {
+        alert("Failed to update status.");
+        console.error(e);
+      }
+    }
+
+    window.showActivities = function () {
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('user-list').style.display = 'none';
+      document.getElementById('activities-section').style.display = 'block';
+      fetchActivities();
+    }
+
+    window.showUsers = function () {
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('activities-section').style.display = 'none';
+      document.getElementById('user-list').style.display = 'block';
+      fetchUsers();
+    }
+
+    window.goBack = function () {
+      document.getElementById('dashboard').style.display = 'flex';
+      document.getElementById('activities-section').style.display = 'none';
+      document.getElementById('user-list').style.display = 'none';
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('user-list').style.display = 'none';
+      document.getElementById('activities-section').style.display = 'none';
+    });
+  </script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: url('assets/banner.png') no-repeat center center fixed;
+      background-size: cover;
+    }
+
+    h1 {
+      margin: 0;
+      padding: 20px;
+      background-color: rgba(165, 214, 167, 0.85);
+      color: #1B5E20;
+      text-align: center;
+    }
+
+    #dashboard {
+      display: flex;
+      justify-content: space-evenly;
+      align-items: center;
+      padding: 30px;
+      max-width: 100%;
+      margin: auto;
+    }
+
+    .tile {
+      background-color: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+      margin: 0 5px;
+      width: 120px;
+      height: 120px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .tile:hover {
+      transform: scale(1.05);
+    }
+
+    .tile img {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
+    }
+
+    .tile-title {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #2E7D32;
+    }
+
+    #activities-section,
+    #user-list {
+      display: none;
+      padding: 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .activity-card {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .activity-card .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .badge {
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .badge.pending { background-color: orange; color: white; }
+    .badge.approved { background-color: green; color: white; }
+    .badge.declined { background-color: red; color: white; }
+
+    .activity-card img {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    .map {
+      height: 200px;
+      border-radius: 12px;
+      margin-top: 10px;
+    }
+
+    .back-btn {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      cursor: pointer;
+    }
+
+    .back-btn:hover {
+      background-color: #388E3C;
+    }
+
+    .actions button {
+      margin-top: 10px;
+      margin-right: 10px;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .actions button:first-child {
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    .actions button:last-child {
+      background-color: #f44336;
+      color: white;
+    }
+
+    .toggle-btn {
+      background-color: #ccc;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .hidden-content {
+      display: none;
+      margin-top: 10px;
+    }
+
+    .hidden-content.show {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>GreenQuest Admin</h1>
+
+  <div id="dashboard">
+    <div class="tile">
+      <img src="https://img.icons8.com/color/96/forest.png" />
+      <div class="tile-title">Planted Trees</div>
+    </div>
+    <div class="tile" onclick="showActivities()">
+      <img src="https://img.icons8.com/ios-filled/100/task.png" />
+      <div class="tile-title">Activities</div>
+    </div>
+    <div class="tile">
+      <img src="https://img.icons8.com/ios-filled/100/combo-chart.png" />
+      <div class="tile-title">Student Progress</div>
+    </div>
+    <div class="tile">
+      <img src="https://img.icons8.com/ios-filled/100/trophy.png" />
+      <div class="tile-title">Leaderboard</div>
+    </div>
+    <div class="tile">
+      <img src="https://img.icons8.com/ios-filled/100/appointment-reminders.png" />
+      <div class="tile-title">Notifications</div>
+    </div>
+    <div class="tile">
+      <img src="https://img.icons8.com/ios-filled/100/speech-bubble.png" />
+      <div class="tile-title">Messages</div>
+    </div>
+    <div class="tile" onclick="showUsers()">
+      <img src="https://img.icons8.com/ios-filled/100/conference-call.png" />
+      <div class="tile-title">Users</div>
+    </div>
+  </div>
+
+  <div id="user-list"></div>
+
+  <div id="activities-section">
+    <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+    <div id="activity-list"></div>
+  </div>
+</body>
+</html>
